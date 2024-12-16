@@ -4,15 +4,17 @@ from django.contrib.auth.hashers import make_password
 from rest_framework import serializers
 from django.core.validators import validate_email
 from django.core.exceptions import ValidationError
-from .models import *
+from . import models
+
+class BranchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Branch
+        fields = ['address', 'open_time', 'close_time']
 
 class CustomerRegistrationSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Customer
-        fields = ['name', 'surname', 'email', 'phone', 'address', 'secret_answer', 'password_hash']
-        extra_kwargs = {
-            'password_hash': {'write_only': True}
-        }
+        model = models.Customer
+        fields = ['id', 'name', 'surname', 'email', 'phone', 'address', 'secret_answer', 'password_hash']
     
     def validate_name(self, value):
         if not value.isalpha():
@@ -33,7 +35,6 @@ class CustomerRegistrationSerializer(serializers.ModelSerializer):
             validate_email(value)
         except ValidationError:
             raise serializers.ValidationError("Invalid email format")
-        
         return value
     
     def validate_phone(self, value):
@@ -42,17 +43,32 @@ class CustomerRegistrationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Invalid phone number format")
         
         value = re.sub(r'\D', '', value)
-        print(value)
-        
         return value
     
     def validate_password_hash(self, value):
         if len(value) < 8:
             raise serializers.ValidationError("Password must be at least 8 characters long")
     
-    def create(self, validated_attrs):
-        hashed_password = make_password(validated_attrs['password_hash'])
-        validated_attrs['password_hash'] = hashed_password
+    def create(self, validated_data):
+        hashed_password = make_password(validated_data['password_hash'])
+        validated_data['password_hash'] = hashed_password
         
-        customer = Customer.objects.create(**validated_attrs)
+        customer = models.Customer.objects.create(**validated_data)
         return customer
+    
+
+class AccountOpenSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Account
+        fields = ['id', 'customer', 'type', 'balance']
+        read_only_fields = ['balance']
+
+    def create(self, validated_data):
+        account = models.Account.objects.create(
+            customer=validated_data['customer'],
+            type=validated_data['type'],
+            balance=0
+        )
+        return account
+    
+

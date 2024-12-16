@@ -9,6 +9,9 @@ class Customer(models.Model):
     address = models.CharField(max_length=255)
     secret_answer = models.CharField(max_length=50)
     password_hash = models.CharField(max_length=255)
+    
+    def __str__(self):
+        return f'{self.name} {self.surname}'
 
 
 class Account(models.Model):
@@ -20,6 +23,12 @@ class Account(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
     type = models.CharField(max_length=20, choices=ACCOUNT_TYPES)
     balance = models.DecimalField(max_digits=15, decimal_places=2)
+    
+    class Meta:
+        unique_together = ('customer', 'type')
+        
+    def __str__(self):
+        return f'{self.customer.name} {self.customer.surname} - {self.type}'
 
 
 class Card(models.Model):
@@ -32,7 +41,7 @@ class Card(models.Model):
     type = models.CharField(max_length=20, choices=CARD_TYPES)
     expiry_date = models.DateField()
     daily_limit = models.DecimalField(max_digits=10, decimal_places=2)
-
+    
 
 class Transaction(models.Model):
     TRANSACTION_TYPES = (
