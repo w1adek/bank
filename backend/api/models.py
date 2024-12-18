@@ -1,31 +1,37 @@
 from django.db import models
+from django.conf import settings
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
 
-# Create your models here.
-class Customer(models.Model):
+# Custom Manager for the Customer model
+class CustomerManager(BaseUserManager):
+    def get_by_natural_key(self, email):
+        return self.get(email=email)
+    
+
+class Customer(AbstractBaseUser):
     name = models.CharField(max_length=50)
     surname = models.CharField(max_length=50)
     email = models.CharField(max_length=50, unique=True)
     phone = models.CharField(max_length=20, unique=True)
     address = models.CharField(max_length=255)
     secret_answer = models.CharField(max_length=50)
-    password_hash = models.CharField(max_length=255)
+    password = models.CharField(max_length=255)
     
+    USERNAME_FIELD = 'email'
+    objects = CustomerManager()
+
     def __str__(self):
-        return f'{self.name} {self.surname}'
+        return f'{self.email}'
 
 
 class Account(models.Model):
     ACCOUNT_TYPES = (
         ('checking', 'Checking'),
         ('savings', 'Savings'),
-        ('admin', 'Admin'),
     )
-    customer = models.ForeignKey(Customer, on_delete=models.CASCADE)
+    customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     type = models.CharField(max_length=20, choices=ACCOUNT_TYPES)
     balance = models.DecimalField(max_digits=15, decimal_places=2)
-    
-    class Meta:
-        unique_together = ('customer', 'type')
         
     def __str__(self):
         return f'{self.customer.name} {self.customer.surname} - {self.type}'
@@ -37,7 +43,7 @@ class Card(models.Model):
         ('credit', 'Credit'),
     )
     account = models.ForeignKey(Account, on_delete=models.CASCADE)
-    card_number = models.CharField(max_length=16, unique=True)
+    card_number = models.CharField(max_length=16)
     type = models.CharField(max_length=20, choices=CARD_TYPES)
     expiry_date = models.DateField()
     daily_limit = models.DecimalField(max_digits=10, decimal_places=2)

@@ -10,6 +10,7 @@ mysqlclient = "*"
 mysql = "*"
 mysql-connector-python = "*"
 djangorestframework = "*"
+djangorestframework-simplejwt = "*"
 
 [dev-packages]
 
