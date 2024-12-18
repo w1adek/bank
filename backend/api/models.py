@@ -55,8 +55,8 @@ class Transaction(models.Model):
         ('withdrawal', 'Withdrawal'),
         ('transfer', 'Transfer'),
     )
-    account = models.ForeignKey(Account, on_delete=models.DO_NOTHING, related_name='from_account')
-    recipient = models.ForeignKey(Account, on_delete=models.DO_NOTHING, related_name='to_recipient')
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='from_account')
+    recipient = models.ForeignKey(Account, on_delete=models.CASCADE, related_name='to_recipient')
     type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
     amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     date = models.DateField(auto_now_add=True)

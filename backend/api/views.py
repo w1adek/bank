@@ -169,3 +169,30 @@ def transfer(request):
     from_account.save()
     to_account.save()
     return Response({"message": "transfer successful."}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_transactions(request):
+    customer = request.user
+    print(customer)
+    transactions = models.Transaction.objects.filter(account__customer=customer)
+    serializer = serializers.TransactionSerializer(transactions, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def close_account(request):
+    try:
+        account = models.Account.objects.get(pk=request.data['account_id'], customer_id=request.user.pk)
+    except models.Account.DoesNotExist:
+        return Response({"error": "account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if account.balance != Decimal('0.00'):
+        return Response(
+            {"error": "account cannot be closed, balance must be zero."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    account.delete()
+    return Response({"message": "account successfully closed."}, status=status.HTTP_200_OK,)

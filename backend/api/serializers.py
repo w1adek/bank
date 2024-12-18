@@ -134,3 +134,9 @@ class UpdatePasswordSerializer(serializers.Serializer):
         customer.password = hashed_password
         customer.save()
         return customer
+    
+    
+class TransactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Transaction
+        fields = ['account', 'recipient', 'type', 'amount', 'date', 'time', 'status']

@@ -11,4 +11,6 @@ urlpatterns = [
     path('transfer/', views.transfer, name='make-transaction'),
     path('deposit/', views.deposit, name='make-deposit'),
     path('withdraw/', views.withdraw, name='make-withdrawal'),
+    path('transactions/', views.get_transactions, name='get-transactions'),
+    path('close-account/', views.close_account, name='close-account'),
 ]
