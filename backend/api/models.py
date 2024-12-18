@@ -21,7 +21,7 @@ class Customer(AbstractBaseUser):
     objects = CustomerManager()
 
     def __str__(self):
-        return f'{self.email}'
+        return f'{self.pk}, {self.phone}, {self.email}, {self.address}'
 
 
 class Account(models.Model):
@@ -34,7 +34,7 @@ class Account(models.Model):
     balance = models.DecimalField(max_digits=15, decimal_places=2)
         
     def __str__(self):
-        return f'{self.customer.name} {self.customer.surname} - {self.type}'
+        return f'{self.pk}, {self.type}, {self.balance}, {self.customer}'
 
 
 class Card(models.Model):
@@ -58,10 +58,13 @@ class Transaction(models.Model):
     account = models.ForeignKey(Account, on_delete=models.DO_NOTHING, related_name='from_account')
     recipient = models.ForeignKey(Account, on_delete=models.DO_NOTHING, related_name='to_recipient')
     type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     date = models.DateField(auto_now_add=True)
     time = models.TimeField(auto_now_add=True)
     status = models.CharField(max_length=20)
+    
+    def __str__(self):
+        return f'{self.pk}, {self.account}, {self.recipient}, {self.type}, {self.amount}, {self.date}, {self.time}, {self.status}'
 
 
 class Loan(models.Model):

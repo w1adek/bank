@@ -2,13 +2,9 @@ import re
 
 from rest_framework import status
 from rest_framework.response import Response
-from rest_framework import generics
-from rest_framework.views import APIView
-from django.contrib.auth import authenticate
-from rest_framework.authtoken.models import Token
-from django.contrib.auth.hashers import make_password
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
+from decimal import Decimal
 from . import models
 from . import serializers
     
@@ -93,3 +89,83 @@ def get_savings_account_balance(request):
     return Response({"balance": str(account.balance)}, status=status.HTTP_200_OK)
 
 
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def deposit(request):
+    try:
+        account = models.Account.objects.get(customer_id=request.user.pk, id=request.data['account_id'])
+    except models.Account.DoesNotExist:
+        return Response({"error": "account not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    amount = Decimal(request.data['amount'])
+    if amount <= 0:
+        return Response({"error": "amount must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
+
+    transaction = models.Transaction.objects.create(
+        account=account,
+        recipient=account,
+        type='deposit',
+        amount=request.data['amount'],
+        status='ok'
+    )
+    transaction.save()
+    account.balance += amount
+    account.save()
+    return Response({"message": "deposit successful."}, status=status.HTTP_200_OK)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def withdraw(request):
+    try:
+        account = models.Account.objects.get(customer_id=request.user.pk, pk=request.data['account_id'])
+    except models.Account.DoesNotExist:
+        return Response({"error": "account not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    amount = Decimal(request.data['amount'])
+    if amount <= 0:
+        return Response({"error": "amount must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
+    if account.balance < amount:
+        return Response({"error": "insufficient funds."}, status=status.HTTP_400_BAD_REQUEST)
+
+    transaction = models.Transaction.objects.create(
+        account=account,
+        recipient=account,
+        type='withdrawal',
+        amount=request.data['amount'],
+        status='ok'
+    )
+    transaction.save()
+    account.balance -= amount
+    account.save()
+    return Response({"message": "withdrawal successful."}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def transfer(request):
+    try:
+        from_account = models.Account.objects.get(customer_id=request.user.pk, pk=request.data['account_id'])
+        to_account = models.Account.objects.get(pk=request.data['to_account_id'])
+    except models.Account.DoesNotExist:
+        return Response({"error": "account not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    amount = Decimal(request.data['amount'])
+    if amount <= 0:
+        return Response({"error": "amount must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
+    if from_account.balance < amount:
+        return Response({"error": "insufficient funds."}, status=status.HTTP_400_BAD_REQUEST)
+
+    transaction = models.Transaction.objects.create(
+        account=from_account,
+        recipient=to_account,
+        type='transfer',
+        amount=request.data['amount'],
+        status='ok'
+    )
+    transaction.save()
+    from_account.balance -= amount
+    to_account.balance += amount
+    from_account.save()
+    to_account.save()
+    return Response({"message": "transfer successful."}, status=status.HTTP_200_OK)
