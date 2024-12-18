@@ -5,6 +5,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from decimal import Decimal
+from random import randint
+from django.utils import timezone
 from . import models
 from . import serializers
     
@@ -226,14 +228,13 @@ def get_branches(request):
 
     data = []
     for branch in branches:
-        # Corrected line: Access related Bankomat objects using the related_name or directly
-        bankomats = models.Bankomat.objects.filter(address=branch)  # Changed from branches.Bankomat
+        bankomats = models.Bankomat.objects.filter(address=branch)
 
         bankomat_list = [
             {
                 "cash_deposit": bankomat.cash_deposit
             }
-            for bankomat in bankomats  # Correctly iterate over bankomats
+            for bankomat in bankomats
         ]
 
         data.append({
@@ -244,3 +245,121 @@ def get_branches(request):
         })
 
     return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def get_exchange_rates(request):
+    exchange_rates = models.ExchangeRate.objects.all()
+
+    data = [
+        {
+            "currency": exchange_rate.currency,
+            "multiplier": str(exchange_rate.multiplier)
+        }
+        for exchange_rate in exchange_rates
+    ]
+
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def issue_card(request):
+    account_id = request.data.get('account_id')
+    card_type = request.data.get('type')
+    daily_limit = request.data.get('daily_limit')
+
+    if not account_id or not card_type or not daily_limit:
+        return Response(
+            {"error": "account id, card type, and daily limit are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+        
+    try:
+        account = models.Account.objects.get(pk=account_id, customer_id=request.user.pk)
+    except models.Account.DoesNotExist:
+        return Response(
+            {"error": "account not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if daily_limit <= 0:
+        return Response({"error": "daily limit must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    valid_card_types = [card[0] for card in models.Card.CARD_TYPES]
+    if card_type not in valid_card_types:
+        return Response(
+            {"error": "Invalid card type. It must be either 'debit' or 'credit'."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def generate_unique_card_number():
+        while True:
+            card_number = ''.join([str(randint(0, 9)) for _ in range(16)])
+            if not models.Card.objects.filter(card_number=card_number).exists():
+                return card_number
+
+    card_number = generate_unique_card_number()
+    expiry_date = timezone.now().date().replace(year=timezone.now().year + 3)
+
+    card = models.Card.objects.create(
+        account=account,
+        card_number=card_number,
+        type=card_type,
+        expiry_date=expiry_date,
+        daily_limit=Decimal(daily_limit)
+    )
+
+    return Response(
+        {"message": "card issued successfully."},
+        status=status.HTTP_200_OK
+    )
+    
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_card_details(request):
+    card_id = request.data.get('card_id')
+
+    if not request.data:
+        return Response({"error": "card id is required."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        card = models.Card.objects.get(pk=card_id, account__customer=request.user)
+    except models.Card.DoesNotExist:
+        return Response({"error": "card not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    card_data = {
+        "card_number": card.card_number,
+        "type": card.type,
+        "expiry_date": card.expiry_date,
+        "daily_limit": str(card.daily_limit)
+    }
+
+    return Response(card_data, status=status.HTTP_200_OK)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def set_daily_limit(request):
+    card_id = request.data.get('card_id')
+    daily_limit = request.data.get('daily_limit')
+
+    if not card_id or not daily_limit:
+        return Response({"error": "card id and new limit are required."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        card = models.Card.objects.get(pk=card_id, account__customer=request.user)
+    except models.Card.DoesNotExist:
+        return Response({"error": "Card not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    daily_limit = Decimal(daily_limit)
+    
+    if daily_limit <= 0:
+        return Response({"error": "daily limit must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    card.daily_limit = daily_limit
+    card.save()
+
+    return Response({"message": f"daily limit updated to {daily_limit} for card {card.card_number}"},
+                    status=status.HTTP_200_OK)

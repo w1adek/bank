@@ -14,4 +14,8 @@ urlpatterns = [
     path('transactions/', views.get_transactions, name='get-transactions'),
     path('close-account/', views.close_account, name='close-account'),
     path('get-branches/', views.get_branches, name='get-branches'),
+    path('get-exchange-rates/', views.get_exchange_rates, name='get-exchange-rates'),
+    path('issue-card/', views.issue_card, name='issue-card'),
+    path('get-card-details/', views.get_card_details, name='get-card-details'),
+    path('set-daily-limit/', views.set_daily_limit, name='set-daily-limit'),
 ]
