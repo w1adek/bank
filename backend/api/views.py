@@ -53,16 +53,38 @@ def update_customer(request):
 
 
 @api_view(['PUT'])
-@permission_classes([IsAuthenticated])
-def update_password(request):
-    customer = models.Customer.objects.get(id=request.user.id)
+def reset_password(request):
+    email = request.data.get('email')
+    new_password = request.data.get('new_password')
+    secret_answer = request.data.get('secret_answer')
 
-    serializer = serializers.UpdatePasswordSerializer(data=request.data, context={'request': request})
-    if serializer.is_valid():
-        serializer.update_password(customer, serializer.validated_data)
-        return Response({"message": "password updated successfully."}, status=status.HTTP_200_OK)
-    
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    if not email or not new_password or not secret_answer:
+        return Response(
+            {"error": "email, new password, and secret answer are required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        customer = models.Customer.objects.get(email=email)
+    except models.Customer.DoesNotExist:
+        return Response(
+            {"error": "customer with this email does not exist."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if customer.secret_answer.lower() != secret_answer.lower():
+        return Response(
+            {"error": "secret answer is incorrect."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    customer.password = serializers.make_password(new_password)
+    customer.save()
+
+    return Response(
+        {"message": "password reset successfully."},
+        status=status.HTTP_200_OK,
+    )
 
 
 @api_view(['GET'])
@@ -176,7 +198,7 @@ def transfer(request):
 def get_transactions(request):
     customer = request.user
     print(customer)
-    transactions = models.Transaction.objects.filter(account__customer=customer)
+    transactions = models.Transaction.objects.filter(account__customer=customer).order_by('-date', '-time')
     serializer = serializers.TransactionSerializer(transactions, many=True)
     return Response(serializer.data, status=status.HTTP_200_OK)
 
@@ -196,3 +218,29 @@ def close_account(request):
         )
     account.delete()
     return Response({"message": "account successfully closed."}, status=status.HTTP_200_OK,)
+
+
+@api_view(['GET'])
+def get_branches(request):
+    branches = models.Branch.objects.all()
+
+    data = []
+    for branch in branches:
+        # Corrected line: Access related Bankomat objects using the related_name or directly
+        bankomats = models.Bankomat.objects.filter(address=branch)  # Changed from branches.Bankomat
+
+        bankomat_list = [
+            {
+                "cash_deposit": bankomat.cash_deposit
+            }
+            for bankomat in bankomats  # Correctly iterate over bankomats
+        ]
+
+        data.append({
+            "branch_address": branch.address,
+            "open_time": branch.open_time,
+            "close_time": branch.close_time,
+            "bankomats": bankomat_list
+        })
+
+    return Response(data, status=status.HTTP_200_OK)

@@ -113,29 +113,6 @@ class AccountOpenSerializer(serializers.ModelSerializer):
         return account
     
     
-class UpdatePasswordSerializer(serializers.Serializer):
-    secret_answer = serializers.CharField(max_length=50)
-    new_password = serializers.CharField(write_only=True)
-
-    def validate_secret_answer(self, value):
-        customer = self.context['request'].user
-        if customer.secret_answer != value:
-            raise serializers.ValidationError("incorrect secret answer.")
-        return value
-
-    def validate_password(self, value):
-        if len(value) < 8:
-            raise serializers.ValidationError('password must be at least 8 characters long.')
-        return value
-
-    def update_password(self, customer, validated_data):
-        new_password = validated_data['new_password']
-        hashed_password = make_password(new_password)
-        customer.password = hashed_password
-        customer.save()
-        return customer
-    
-    
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Transaction
