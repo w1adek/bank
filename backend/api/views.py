@@ -1,9 +1,10 @@
 import re
 
+from django.db.models import Sum, Q
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from decimal import Decimal
 from random import randint
 from django.utils import timezone
@@ -27,7 +28,6 @@ def register(request):
 @permission_classes([IsAuthenticated])
 def open_account(request):
     customer_id = request.user.id
-    print(customer_id)
     type = request.data['type']
     
     if models.Account.objects.filter(customer_id=customer_id, type=type).exists():
@@ -94,7 +94,7 @@ def reset_password(request):
 def get_checking_account_balance(request):
     customer = request.user
     account = models.Account.objects.filter(customer=customer, type='checking').first()
-    
+    print(account)
     if not account:
         return Response({"error": "No checking account found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -130,7 +130,7 @@ def deposit(request):
         recipient=account,
         type='deposit',
         amount=request.data['amount'],
-        status='ok'
+        status='completed'
     )
     transaction.save()
     account.balance += amount
@@ -157,7 +157,7 @@ def withdraw(request):
         recipient=account,
         type='withdrawal',
         amount=request.data['amount'],
-        status='ok'
+        status='completed'
     )
     transaction.save()
     account.balance -= amount
@@ -165,7 +165,7 @@ def withdraw(request):
     return Response({"message": "withdrawal successful."}, status=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def transfer(request):
     try:
@@ -174,25 +174,67 @@ def transfer(request):
     except models.Account.DoesNotExist:
         return Response({"error": "account not found."}, status=status.HTTP_404_NOT_FOUND)
     
+    if from_account == to_account:
+        return Response({"error": "cannot transfer to the same account."}, status=status.HTTP_400_BAD_REQUEST)
+    
     amount = Decimal(request.data['amount'])
     if amount <= 0:
         return Response({"error": "amount must be greater than 0."}, status=status.HTTP_400_BAD_REQUEST)
     if from_account.balance < amount:
         return Response({"error": "insufficient funds."}, status=status.HTTP_400_BAD_REQUEST)
 
+    if amount >= 1000:
+        transaction = models.Transaction.objects.create(
+            account=from_account,
+            recipient=to_account,
+            type='transfer',
+            amount=request.data['amount'],
+            status='pending'
+        )
+        transaction.save()
+        from_account.balance -= amount
+        from_account.save()
+        return Response({"message": "transfer pending approval."}, status=status.HTTP_200_OK)
+        
     transaction = models.Transaction.objects.create(
         account=from_account,
         recipient=to_account,
         type='transfer',
         amount=request.data['amount'],
-        status='ok'
+        status='completed'
     )
     transaction.save()
     from_account.balance -= amount
-    to_account.balance += amount
     from_account.save()
+    to_account.balance += amount
     to_account.save()
     return Response({"message": "transfer successful."}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def get_pending_transactions(request):
+    transactions = models.Transaction.objects.filter(status='pending')
+    serializer = serializers.TransactionSerializer(transactions, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)\
+        
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def approve_transaction(request):
+    try:
+        transaction = models.Transaction.objects.get(pk=request.data.get('transaction_id'))
+    except models.Transaction.DoesNotExist:
+        return Response({"error": "transaction not found."}, status=status.HTTP_404_NOT_FOUND)
+    
+    if transaction.status == 'completed':
+        return Response({"error": "transaction already completed."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    transaction.status = 'completed'
+    transaction.save()
+    transaction.recipient.balance += transaction.amount
+    transaction.recipient.save()
+    return Response({"message": "transaction approved."}, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -469,4 +511,130 @@ def delete_saved_recipient(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_saved_recipients(request):
-    pass
+    customer = request.user
+    account_id = request.data.get('account_id')
+
+    if not account_id:
+        return Response({"error": "account_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        account = models.Account.objects.get(pk=account_id, customer_id=customer)
+    except models.Account.DoesNotExist:
+        return Response({"error": "account not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    saved_recipients = models.SavedRecipient.objects.filter(account=account)
+    data = [{"recipient_account_id": saved_recipient.recipient.id,}
+        for saved_recipient in saved_recipients
+    ]
+
+    return Response(data, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def apply_for_loan(request):
+    serializer = serializers.LoanSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsAdminUser])
+def approve_loan(request, loan_id):
+    try:
+        loan = models.Loan.objects.get(id=loan_id)
+        if loan.approved:
+            return Response({'error': 'loan already approved'}, status=status.HTTP_400_BAD_REQUEST)
+        loan.approved = True
+        loan.save()
+        return Response({'status': 'loan approved'}, status=status.HTTP_200_OK)
+    except models.Loan.DoesNotExist:
+        return Response({'error': 'loan not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_loans(request):
+    loans = models.Loan.objects.filter(account_id=request.user.id)
+    if not loans.exists():
+        return Response({'error': 'no loans found'}, status=status.HTTP_404_NOT_FOUND)
+    serializer = serializers.LoanSerializer(loans, many=True)
+    return Response(serializer.data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def update_loan_payment(request, loan_id):
+    try:
+        loan = models.Loan.objects.get(id=loan_id)
+        if 'remaining_amount' in request.data:
+            if Decimal(request.data['remaining_amount']) <= 0:
+                return Response({'error': 'remaining amount must be greater than 0'}, status=status.HTTP_400_BAD_REQUEST)
+            loan.remaining_amount -= Decimal(request.data['remaining_amount'])
+        serializer = serializers.LoanSerializer(loan, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except models.Loan.DoesNotExist:
+        return Response({'error': 'loan not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_loan_details(request, loan_id):
+    try:
+        loan = models.Loan.objects.get(id=loan_id, account_id=request.user.id)
+        data = {
+            "account_id": loan.account_id,
+            "interest_rate": str(loan.interest_rate),
+            "total_amount": str(loan.total_amount),
+            "remaining_amount": str(loan.remaining_amount),
+            "start_date": loan.start_date,
+            "end_date": loan.end_date,
+            "payment_schedule": loan.payment_schedule
+        }
+        return Response(data, status=status.HTTP_200_OK)
+    except models.Loan.DoesNotExist:
+        return Response({'error': 'loan not found'}, status=status.HTTP_404_NOT_FOUND)
+    
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def generate_financial_report(request):
+    account_id = request.query_params.get('account_id')
+    report_type = request.query_params.get('report_type', 'summary')
+    
+    transactions = models.Transaction.objects.filter(
+        Q(account__customer=request.user) | Q(recipient__customer=request.user),
+        status='completed'
+    )
+
+    if account_id:
+        transactions = transactions.filter(Q(account_id=account_id) | Q(recipient_id=account_id))
+
+    total_deposits = transactions.filter(type='deposit').aggregate(total=Sum('amount'))['total'] or Decimal(0)
+    total_withdrawals = transactions.filter(type='withdrawal').aggregate(total=Sum('amount'))['total'] or Decimal(0)
+    total_transfers_out = transactions.filter(type='transfer', account__customer=request.user).aggregate(total=Sum('amount'))['total'] or Decimal(0)
+    total_transfers_in = transactions.filter(type='transfer', recipient__customer=request.user).aggregate(total=Sum('amount'))['total'] or Decimal(0)
+
+    if report_type == 'income':
+        income = total_deposits + total_transfers_in
+        return Response({"income": str(income)}, status=200)
+
+    elif report_type == 'expenses':
+        expenses = total_withdrawals + total_transfers_out
+        return Response({"expenses": str(expenses)}, status=200)
+
+    balance = total_deposits + total_transfers_in - (total_withdrawals + total_transfers_out)
+    report = {
+        "total_deposits": str(total_deposits),
+        "total_withdrawals": str(total_withdrawals),
+        "total_transfers_out": str(total_transfers_out),
+        "total_transfers_in": str(total_transfers_in),
+        "net_balance": str(balance)
+    }
+
+    return Response(report, status=status.HTTP_200_OK)

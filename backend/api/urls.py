@@ -20,4 +20,8 @@ urlpatterns = [
     path('set-daily-limit/', views.set_daily_limit, name='set-daily-limit'),
     path('add-saved-recipient/', views.add_saved_recipient, name='add-saved-recipient'),
     path('delete-saved-recipient/', views.delete_saved_recipient, name='delete-saved-recipient'),
+    path('get-saved-recipients/', views.get_saved_recipients, name='get-saved-recipients'),
+    path('get-pending-transactions/', views.get_pending_transactions, name='get-pending-transactions'),
+    path('approve-transaction/', views.approve_transaction, name='approve-transaction'),
+    path('generate-financial-report/', views.generate_financial_report, name='generate-financial-report'),
 ]

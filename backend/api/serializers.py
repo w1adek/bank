@@ -116,4 +116,10 @@ class AccountOpenSerializer(serializers.ModelSerializer):
 class TransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Transaction
-        fields = ['account', 'recipient', 'type', 'amount', 'date', 'time', 'status']
+        fields = ['id', 'account', 'recipient', 'type', 'amount', 'date', 'time', 'status']
+        
+        
+class LoanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Loan
+        fields = ['customer', 'amount', 'interest_rate', 'start_date', 'end_date']
