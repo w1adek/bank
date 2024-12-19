@@ -363,3 +363,110 @@ def set_daily_limit(request):
 
     return Response({"message": f"daily limit updated to {daily_limit} for card {card.card_number}"},
                     status=status.HTTP_200_OK)
+    
+    
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def add_saved_recipient(request):
+    customer = request.user
+    account_id = request.data.get('account_id')
+    recipient_account_id = request.data.get('recipient_account_id')
+
+    if account_id == recipient_account_id:
+        return Response(
+            {"error": "account_id and recipient_account_id cannot be the same."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not account_id or not recipient_account_id:
+        return Response(
+            {"error": "account_id and recipient_account_id are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        account = models.Account.objects.get(pk=account_id, customer_id=customer)
+    except models.Account.DoesNotExist:
+        return Response(
+            {"error": "account not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        recipient_account = models.Account.objects.get(pk=recipient_account_id)
+    except models.Account.DoesNotExist:
+        return Response(
+            {"error": "recipient account not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    if models.SavedRecipient.objects.filter(account=account, recipient=recipient_account).exists():
+        return Response(
+            {"error": "recipient already saved."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    models.SavedRecipient.objects.create(account=account, recipient=recipient_account)
+
+    return Response(
+        {"message": "recipient added successfully."},
+        status=status.HTTP_201_CREATED
+    )
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_saved_recipient(request):
+    customer = request.user
+    account_id = request.data.get('account_id')
+    recipient_account_id = request.data.get('recipient_account_id')
+    
+    if account_id == recipient_account_id:
+        return Response(
+            {"error": "account_id and recipient_account_id cannot be the same."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    if not account_id or not recipient_account_id:
+        return Response(
+            {"error": "account_id and recipient_account_id are required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        account = models.Account.objects.get(pk=account_id, customer_id=customer)
+    except models.Account.DoesNotExist:
+        return Response(
+            {"error": "account not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    try:
+        recipient_account = models.Account.objects.get(pk=recipient_account_id)
+    except models.Account.DoesNotExist:
+        return Response(
+            {"error": "recipient account not found."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    saved_recipient = models.SavedRecipient.objects.filter(
+        account=account, recipient=recipient_account)
+
+    if not saved_recipient:
+        return Response(
+            {"error": "recipient not found in saved list."},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    saved_recipient.delete()
+
+    return Response(
+        {"message": "recipient removed successfully."},
+        status=status.HTTP_200_OK
+    )
+    
+    
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_saved_recipients(request):
+    pass

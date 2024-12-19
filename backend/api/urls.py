@@ -18,4 +18,6 @@ urlpatterns = [
     path('issue-card/', views.issue_card, name='issue-card'),
     path('get-card-details/', views.get_card_details, name='get-card-details'),
     path('set-daily-limit/', views.set_daily_limit, name='set-daily-limit'),
+    path('add-saved-recipient/', views.add_saved_recipient, name='add-saved-recipient'),
+    path('delete-saved-recipient/', views.delete_saved_recipient, name='delete-saved-recipient'),
 ]
